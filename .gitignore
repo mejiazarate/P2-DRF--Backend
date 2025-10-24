@@ -1,0 +1,418 @@
+# ========================================
+# .gitignore para Django REST Framework
+# SmartSales365 Backend
+# ========================================
+
+# ============ PYTHON ============
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+
+# ============ DJANGO ============
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Django migrations (opcional - comentar si quieres versionar)
+# **/migrations/*.py
+# !**/migrations/__init__.py
+
+# Static files
+/static/
+/staticfiles/
+static_root/
+static_cdn/
+
+# Media files
+/media/
+media_root/
+
+# Django secret key
+secret_key.txt
+
+
+# ============ DJANGO REST FRAMEWORK ============
+# DRF browsable API credentials
+.rest_framework_cache/
+
+
+# ============ ENVIRONMENT VARIABLES ============
+# CRÍTICO: Nunca subir archivos de entorno
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+.env.test
+*.env
+env.py
+settings_local.py
+
+
+# ============ VIRTUAL ENVIRONMENT ============
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+venv.bak/
+env.bak/
+virtualenv/
+
+
+# ============ CREDENTIALS & SECRETS ============
+# CRÍTICO: Credenciales de servicios
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!.vscode/*.json
+
+# Firebase
+*firebase*.json
+firebase-adminsdk*.json
+
+# Google Cloud
+*gcloud*.json
+*google-cloud*.json
+*service-account*.json
+proyecto*.json
+
+# AWS
+*.pem
+*.key
+aws_credentials.txt
+
+# API Keys
+api_keys.txt
+secrets.txt
+credentials.txt
+*.base64.txt
+*base64.txt
+
+
+# ============ DATABASE ============
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+*.bak
+*.backup
+
+# PostgreSQL
+postgresql.conf
+pg_hba.conf
+
+# MySQL
+my.cnf
+
+
+# ============ MACHINE LEARNING / AI ============
+# Modelos entrenados
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.model
+*.pt
+*.pth
+*.onnx
+*.pb
+models/
+saved_models/
+checkpoints/
+
+# Datasets
+datasets/
+data/
+*.csv
+*.xlsx
+*.xls
+!requirements.txt
+
+# TensorFlow
+*.ckpt
+*.ckpt.*
+*.meta
+checkpoint
+
+# Jupyter
+.ipynb_checkpoints/
+
+
+# ============ REPORTES GENERADOS ============
+# Reportes dinámicos generados
+reportes/
+generated_reports/
+*.pdf
+*.xlsx
+reports_output/
+
+
+# ============ IDEs & EDITORS ============
+# VSCode
+.vscode/
+.code-workspace
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Atom
+.atom/
+
+
+# ============ OPERATING SYSTEM ============
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+
+# ============ LOGS ============
+# Log files
+*.log
+logs/
+log/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ============ TEMPORARY FILES ============
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.cache
+temp/
+tmp/
+*.old
+*.orig
+
+
+# ============ DOCKER ============
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+
+# ============ CI/CD ============
+# GitHub Actions
+.github/workflows/secrets.yml
+
+
+# ============ TESTING ============
+# Test coverage
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+.tox/
+.pytest_cache/
+test-results/
+*.cover
+
+
+# ============ BACKUP & ARCHIVES ============
+# Backups
+*.backup
+*.bak
+backups/
+backup/
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+
+# ============ NODE (si usas alguna tool) ============
+# Node modules (si usas herramientas de frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+
+# ============ CUSTOM PROJECT FILES ============
+# Archivos de texto temporales del proyecto
+c.txt
+t.txt
+notas.txt
+todo.txt
+pruebas.txt
+
+# Archivos de configuración local
+config_local.py
+settings_override.py
+
+
+# ============ EXCLUIR PERO MANTENER ESTRUCTURA ============
+# Mantener carpetas vacías
+!.gitkeep
+
+
+# ============ PERMITIR ARCHIVOS IMPORTANTES ============
+# Archivos que SÍ deben versionarse
+!requirements.txt
+!Dockerfile
+!docker-compose.yml
+!.dockerignore
+!README.md
+!LICENSE
+!.gitignore
+!.editorconfig
+!pyproject.toml
+!setup.py
+!manage.py
