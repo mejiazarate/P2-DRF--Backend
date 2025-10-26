@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils import timezone
-from .models import (Pago,
+from .models import (Pago,Producto,Promocion,Venta, VentaProducto,TipoGarantia,
     Rol, Usuario,Bitacora,DetalleBitacora,DispositivoMovil,NotificacionPush
 )
 from .fcm_service import enviar_notificacion_fcm
@@ -242,70 +242,122 @@ class NotificacionPushSerializer(serializers.ModelSerializer):
         rep['tipo_display'] = instance.get_tipo_display()
         rep['estado_display'] = instance.get_estado_display()
         return rep
+from rest_framework import serializers
+from .models import Pago, Carrito
+from django.contrib.contenttypes.models import ContentType
+
+from rest_framework import serializers
+from .models import Pago
+
 class PagoSerializer(serializers.ModelSerializer):
     # Campos de solo lectura para mostrar información relacionada
     usuario_nombre = serializers.SerializerMethodField()
-    tipo_pago_display = serializers.CharField(source='get_tipo_pago_display', read_only=True)
-    metodo_pago_display = serializers.CharField(source='get_metodo_pago_display', read_only=True)
-    
-    # Campos para el objeto genérico relacionado
-    objeto_relacionado_tipo = serializers.SerializerMethodField()     
-    objeto_relacionado_id = serializers.SerializerMethodField()
-    objeto_relacionado_descripcion = serializers.SerializerMethodField()
+    tipo_pago_display = serializers.CharField(source='get_metodo_pago_display', read_only=True)
 
     class Meta:
         model = Pago
         fields = [
-            'id', 'usuario', 'usuario_nombre', 'tipo_pago', 'tipo_pago_display',
-            'monto', 'fecha_pago', 'metodo_pago', 'metodo_pago_display',
-            'referencia', 'comprobante', 'observaciones',
-            'objeto_relacionado_tipo', 'objeto_relacionado_id', 'objeto_relacionado_descripcion'
+            'id', 'usuario', 'usuario_nombre', 'monto', 'fecha_pago', 'metodo_pago',
+            'tipo_pago_display', 'referencia', 'comprobante', 'observaciones', 'venta'
         ]
-        read_only_fields = ['fecha_pago', 'comprobante'] # El comprobante se genera por la señal
+        read_only_fields = ['fecha_pago', 'comprobante']  # El comprobante se genera por la señal
 
     def get_usuario_nombre(self, obj):
+        """Retorna el nombre completo del usuario que hizo el pago"""
         if obj.usuario:
             return f"{obj.usuario.nombre} {obj.usuario.apellido_paterno}".strip()
         return None
+
+
+
     
-    def get_objeto_relacionado_tipo(self, obj):
-        if obj.content_object:
-            return obj.content_object._meta.verbose_name
-        return None
 
-    def get_objeto_relacionado_id(self, obj):
-        if obj.content_object:
-            return obj.content_object.id
-        return None
+class PromocionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Promocion
+        fields = ['id', 'descripcion', 'fecha_inicio', 'fecha_fin', 'descuento']
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Se pueden agregar valores adicionales aquí si es necesario, por ejemplo:
+        rep['descuento_formateado'] = f"{instance.descuento}%"
+        return rep
+class VentaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Venta
+        fields = ['id', 'fecha', 'cliente',
+                   'cantidad', 'precio_unitario',
+                     'precio_total', 'promocion',
+                       'metodo_pago', 'estado_venta',
+                       ]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Formatear los precios o agregar información adicional si es necesario
+        rep['precio_total_formateado'] = f"${instance.precio_total:.2f}"
+        return rep
+
+class VentaProductoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VentaProducto
+        fields = ['id','venta', 'producto', 'cantidad', 'precio_unitario']
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Agregar detalles adicionales del producto si es necesario
+        rep['producto_nombre'] = instance.producto.nombre
+        return rep
+# serializers.py
+from rest_framework import serializers
+from .models import Carrito, CarritoItem, Producto
+
+
+class TipoGarantiaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoGarantia
+        fields = '__all__'    
+from rest_framework import serializers
+from .models import Carrito, CarritoItem, Producto
+
+class ProductoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Producto
+        fields = ['id', 'nombre', 'descripcion', 'precio', 'imagen', 'stock', 'marca', 'modelo']
+
+class CarritoItemSerializer(serializers.ModelSerializer):
+    # ✅ CORRECCIÓN: Eliminar source='precio_unitario'
+    precio_unitario = serializers.ReadOnlyField()
+    subtotal = serializers.ReadOnlyField()
+    producto_detalle = ProductoSerializer(source='producto', read_only=True)
+
+    class Meta:
+        model = CarritoItem
+        fields = ['id', 'producto', 'producto_detalle', 'cantidad', 'precio_unitario', 'subtotal']
+
+class CarritoSerializer(serializers.ModelSerializer):
+    items = CarritoItemSerializer(many=True, read_only=True)
+    total = serializers.ReadOnlyField()
+    cantidad_items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Carrito
+        fields = ['id', 'user', 'cart_token', 'estado', 'creado', 'actualizado', 'items', 'total', 'cantidad_items']
+        read_only_fields = ['cart_token', 'creado', 'actualizado']
+
+    def get_cantidad_items(self, obj):
+        """Retorna la cantidad total de items en el carrito."""
+        return obj.items.count()
+
+    def to_representation(self, instance):
+        """Modifica la representación del Carrito para incluir información adicional."""
+        representation = super().to_representation(instance)
         
-    def get_objeto_relacionado_descripcion(self, obj):
-        if obj.content_object:
-            # Aquí puedes personalizar cómo quieres describir cada tipo de objeto.
-            # Por ejemplo, para una Cuota podrías mostrar el concepto y la casa.
-            # Para una Reserva, el área común y la fecha.
-            if isinstance(obj.content_object, Cuota):
-                return f"{obj.content_object.concepto.nombre} - Casa {obj.content_object.casa.numero_casa} ({obj.content_object.get_estado_display()})"
-            elif isinstance(obj.content_object, Reserva):
-                return f"Reserva de {obj.content_object.area_comun.nombre} el {obj.content_object.fecha} ({obj.content_object.get_estado_display()})"
-            # Añade más casos si tienes otros tipos de objetos relacionados
-            return str(obj.content_object) # Fallback a la representación por defecto del objeto
-        return None
-
-    def create(self, validated_data):
-        # Si el tipo de pago es 'cuota' o 'reserva', asegúrate de que el content_object
-        # y content_type se asignen correctamente. Esto es importante si el pago no viene de Stripe
-        # y quieres crear pagos de forma manual a través de la API.
-        tipo_pago = validated_data.get('tipo_pago')
-        content_object = validated_data.pop('content_object', None) # Extraer si se pasó en validated_data
-
-        if content_object:
-            validated_data['content_type'] = ContentType.objects.get_for_model(content_object)
-            validated_data['object_id'] = content_object.id
-        elif tipo_pago in ['cuota', 'reserva'] and not (validated_data.get('content_type') and validated_data.get('object_id')):
-            # Si es un pago de cuota o reserva, y no se proporcionó el objeto genérico,
-            # deberías validar que se asigne correctamente, o lanzar un error.
-            # Para este ejemplo, lo dejaremos pasar, asumiendo que el frontend o Stripe lo gestiona.
-            # En un caso real de creación manual, necesitarías campos para `cuota_id` o `reserva_id`.
-            pass # Aquí puedes añadir lógica de validación más estricta si es necesario
-
-        return super().create(validated_data)
+        # Si es un carrito anónimo, asegurarse de incluir el cart_token
+        if not instance.user:
+            representation['cart_token'] = instance.cart_token
+        
+        # Eliminar el user si no está autenticado
+        if not instance.user:
+            representation.pop('user', None)
+        
+        return representation

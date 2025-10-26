@@ -1,3 +1,4 @@
+from django.utils.crypto import get_random_string
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import api_view
@@ -18,8 +19,14 @@ from django.contrib.auth.models import Group, Permission as AuthPermission
 from rest_framework import serializers
 import logging
 from django.conf import settings
+import stripe 
 
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
+#pago
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+import stripe
 from django.db.models import Prefetch
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -200,9 +207,11 @@ class UsuarioViewSet(BitacoraLoggerMixin,viewsets.ModelViewSet):
 
         # 204 sin contenido (front solo necesita saber que fue OK)
         return Response(status=status.HTTP_204_NO_CONTENT)
-    @action(detail=False, methods=['get'], url_path='propietarios', url_name='propietarios')
-    def propietarios(self, request):
-        pass
+    @action(detail=False, methods=['get'], url_path='clientes', url_name='clientes')
+    def clientes(self, request):
+        clientes=self.queryset.filter(rol__nombre="Cliente")
+        serializer=self.get_serializer(clientes,many=True)
+        return Response(serializer.data)
 
 
 
@@ -324,131 +333,526 @@ class DetalleBitacoraViewSet(BitacoraLoggerMixin,viewsets.ModelViewSet):
     queryset=DetalleBitacora.objects.all()
     serializer_class=DetalleBitacoraSerializer
     permission_classes=[IsAuthenticated]
+    
+class DetalleBitacoraViewSet(BitacoraLoggerMixin,viewsets.ModelViewSet):
+    queryset=DetalleBitacora.objects.all()
+    serializer_class=DetalleBitacoraSerializer
+    permission_classes=[IsAuthenticated]
 
+
+import stripe
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Carrito
+
+from django.db import transaction  # Para garantizar que todo se guarde correctamente en caso de error
 
 class PagoViewSet(BitacoraLoggerMixin, viewsets.ModelViewSet):
-    queryset = Pago.objects.select_related('usuario').all() # Optimized queryset
+    queryset = Pago.objects.all()  # Aquí defines el queryset
     serializer_class = PagoSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
+
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def crear_sesion_stripe(self, request):
         """
-        Crea una sesión de Stripe Checkout para pagar una cuota o reserva.
-        Espera: tipo_objeto (cuota/reserva), objeto_id, success_url, cancel_url
+        Crea una sesión de Stripe Checkout para pagar un carrito de compras.
+        Espera: tipo_objeto ('carrito'), objeto_id (id del carrito), success_url, cancel_url
         """
-        tipo_objeto = request.data.get('tipo_objeto')  # 'cuota' o 'reserva'
+        tipo_objeto = request.data.get('tipo_objeto')  # 'carrito'
         objeto_id = request.data.get('objeto_id')
         success_url = request.data.get('success_url')
         cancel_url = request.data.get('cancel_url')
 
+        # Verificar si todos los parámetros están presentes
+        print(f"Datos recibidos: tipo_objeto={tipo_objeto}, objeto_id={objeto_id}, success_url={success_url}, cancel_url={cancel_url}")
+
         if not all([tipo_objeto, objeto_id, success_url, cancel_url]):
+            print("Faltan parámetros.")
             return Response({"error": "Faltan parámetros."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Obtener el objeto relacionado
-            if tipo_objeto == 'cuota':
-                objeto = Cuota.objects.get(id=objeto_id)
-                nombre_producto = f"Cuota {objeto.concepto.nombre} - {objeto.periodo.strftime('%Y-%m')}"
-                monto = int(objeto.monto * 100)  # Stripe usa centavos
-            elif tipo_objeto == 'reserva':
-                objeto = Reserva.objects.get(id=objeto_id)
-                nombre_producto = f"Reserva {objeto.area_comun.nombre} - {objeto.fecha}"
-                monto = int(objeto.area_comun.costo_alquiler * 100)
-            else:
-                return Response({"error": "Tipo de objeto no soportado."}, status=status.HTTP_400_BAD_REQUEST)
+            # Comenzamos una transacción para asegurarnos de que todo se ejecute correctamente
+            with transaction.atomic():
+                # Obtener el carrito
+                if tipo_objeto == 'carrito':
+                    try:
+                        carrito = Carrito.objects.get(id=objeto_id, user=request.user)
+                    except Carrito.DoesNotExist:
+                        print(f"Carrito no encontrado o no pertenece al usuario: {objeto_id}")
+                        return Response({"error": "Carrito no encontrado o no pertenece al usuario."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Crear sesión de Stripe
-            session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[{
-                    'price_data': {
-                        'currency': 'usd',  # o tu moneda local, ej: 'mxn', 'pen', 'cop'
-                        'product_data': {
-                            'name': nombre_producto,
-                        },
-                        'unit_amount': monto,
-                    },
-                    'quantity': 1,
-                }],
-                mode='payment',
-                success_url=success_url + '?session_id={CHECKOUT_SESSION_ID}',
-                cancel_url=cancel_url,
-                metadata={
-                    'tipo_objeto': tipo_objeto,
-                    'objeto_id': str(objeto_id),
-                    'usuario_id': str(request.user.id),
-                }
-            )
+                    print(f"Carrito encontrado: {carrito.id}, usuario: {carrito.user.username}")
 
-            return Response({
-                'id': session.id,
-                'url': session.url
-            })
+                    # Crear la venta (o simularla)
+                    venta = Venta.objects.create(
+                        cliente=request.user,
+                        carrito=carrito,
+                        cantidad=carrito.items.count(),
+                        precio_unitario=carrito.total / carrito.items.count() if carrito.items.count() else 0,
+                        precio_total=carrito.total,
+                        metodo_pago="tarjeta",
+                        estado_venta="pendiente",
+                    )
 
-        except (Cuota.DoesNotExist, Reserva.DoesNotExist):
-            return Response({"error": "Objeto no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+                    # Crear línea de items de carrito para Stripe
+                    line_items = []
+                    for item in carrito.items.all():
+                        line_items.append({
+                            'price_data': {
+                                'currency': 'usd',  # Puedes cambiar esto a tu moneda local
+                                'product_data': {
+                                    'name': item.producto.nombre,
+                                },
+                                'unit_amount': int(item.producto.precio * 100),  # Stripe usa centavos
+                            },
+                            'quantity': item.cantidad,
+                        })
+
+                    # Verificar que los items están siendo procesados correctamente
+                    print(f"Líneas de items para Stripe: {line_items}")
+
+                    # Crear sesión de Stripe
+                    session = stripe.checkout.Session.create(
+                        payment_method_types=['card'],
+                        line_items=line_items,
+                        mode='payment',
+                        success_url=success_url + '?session_id={CHECKOUT_SESSION_ID}',
+                        cancel_url=cancel_url,
+                        metadata={
+                            'tipo_objeto': tipo_objeto,  # 'carrito' en este caso
+                            'objeto_id': str(objeto_id),  # ID del carrito
+                            'usuario_id': str(request.user.id),
+                            'venta_id': str(venta.id)  # Agregar el ID de la venta que se está creando
+                        }
+                    )
+
+                    print(f"Sesión de Stripe creada: {session.id}, URL: {session.url}")
+
+                    # Devolver el ID de la sesión y la URL para redirigir al usuario
+                    return Response({
+                        'id': session.id,
+                        'url': session.url
+                    })
+
+                else:
+                    print(f"Tipo de objeto no soportado: {tipo_objeto}")
+                    return Response({"error": "Tipo de objeto no soportado."}, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
+            print(f"Error al procesar la sesión de Stripe: {str(e)}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+from rest_framework import viewsets
+from .models import Promocion
+from .serializers import PromocionSerializer
+
+class PromocionViewSet(viewsets.ModelViewSet):
+    queryset = Promocion.objects.all()
+    serializer_class = PromocionSerializer
+         
+from .models import Venta
+from .serializers import VentaSerializer
+
+class VentaViewSet(viewsets.ModelViewSet):
+    queryset = Venta.objects.all()
+    serializer_class = VentaSerializer
+from .models import VentaProducto
+from .serializers import VentaProductoSerializer
+
+class VentaProductoViewSet(viewsets.ModelViewSet):
+    queryset = VentaProducto.objects.all()
+    serializer_class = VentaProductoSerializer
+from .models import Producto
+from .serializers import ProductoSerializer
+
+class ProductoViewSet(viewsets.ModelViewSet):
+    queryset = Producto.objects.all()
+    serializer_class = ProductoSerializer
+
+# views.py
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from .models import Carrito, CarritoItem
+from .serializers import CarritoSerializer, CarritoItemSerializer
+from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404
+from django.utils.crypto import get_random_string
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from .models import Carrito, CarritoItem, Producto
+from .serializers import CarritoSerializer, CarritoItemSerializer
+
+class CarritoViewSet(viewsets.ModelViewSet):
+    queryset = Carrito.objects.all()
+    serializer_class = CarritoSerializer
+
     def get_queryset(self):
-        """
-        Este método es clave para filtrar los pagos según el rol del usuario.
-        - Los administradores ven todos los pagos.
-        - Otros usuarios (Propietario, Inquilino, Trabajador, Seguridad) solo ven sus propios pagos.
-        """
-        user = self.request.user
-
-        # Si el usuario no está autenticado, devuelve un queryset vacío (aunque IsAuthenticated ya lo manejaría)
-        if not user.is_authenticated:
-            return Pago.objects.none()
-
-        # Comprueba si el usuario tiene un rol y si es 'Administrador'
-        # Asumiendo que el campo 'rol' es un ForeignKey al modelo Rol y tiene un campo 'nombre'
-        is_admin = hasattr(user, 'rol') and user.rol and user.rol.nombre == 'Administrador'
-
-        if is_admin:
-            # Los administradores ven todos los pagos
-            return super().get_queryset()
-        else:
-            # Otros usuarios solo ven los pagos que ellos mismos realizaron
-            # El campo 'usuario' en el modelo Pago se relaciona con el Usuario que hizo el pago.
-            return super().get_queryset().filter(usuario=user)
-
-    # Puedes añadir lógica adicional para `perform_create`, `perform_update`, `perform_destroy`
-    # si necesitas más control sobre quién puede crear, modificar o eliminar pagos.
-    # Por ejemplo, quizás solo los administradores puedan crear pagos manualmente,
-    # mientras que los pagos de cuotas se crean automáticamente por el sistema.
+        """ Devuelve los carritos del usuario o el carrito anónimo. """
+        if self.request.user.is_authenticated:
+            return Carrito.objects.filter(user=self.request.user, estado='open')
+        cart_token = self.request.query_params.get('cart_token')
+        if cart_token:
+            return Carrito.objects.filter(cart_token=cart_token, estado='open')
+        return Carrito.objects.none()
 
     def perform_create(self, serializer):
-        user = self.request.user
-        # Si no es un administrador, asegúrate de que el pago se asocie al usuario que lo crea
-        if not (hasattr(user, 'rol') and user.rol and user.rol.nombre == 'Administrador'):
-            serializer.save(usuario=user)
+        """ Crear un carrito con un cart_token si no es un carrito autenticado. """
+        if not self.request.user.is_authenticated:
+            cart_token = self.request.data.get('cart_token', get_random_string(48))
+            serializer.save(cart_token=cart_token)
         else:
-            # Los administradores pueden crear pagos y asociarlos a cualquier usuario
-            serializer.save()
+            serializer.save(user=self.request.user)
 
-    def perform_update(self, serializer):
-        user = self.request.user
-        instance = serializer.instance
-        # Los administradores pueden actualizar cualquier pago
-        if hasattr(user, 'rol') and user.rol and user.rol.nombre == 'Administrador':
-            serializer.save()
+    def get_or_create_cart(self):
+        """
+        Obtiene o crea un carrito para el usuario actual o anónimo.
+        Este método NO usa self.get_object() porque es para acciones de lista.
+        """
+        if self.request.user.is_authenticated:
+            # Usuario autenticado: buscar o crear carrito por usuario
+            carrito, created = Carrito.objects.get_or_create(
+                user=self.request.user,
+                estado='open',
+                defaults={'cart_token': get_random_string(48)}
+            )
         else:
-            # Los usuarios solo pueden actualizar sus propios pagos
-            if instance.usuario == user:
-                serializer.save()
-            else:
-                raise PermissionDenied("No tienes permiso para actualizar pagos de otros usuarios.")
+            # Usuario anónimo: usar cart_token de la sesión o crear uno nuevo
+            cart_token = self.request.data.get('cart_token')
+            
+            if not cart_token:
+                # Intentar obtener del query params
+                cart_token = self.request.query_params.get('cart_token')
+            
+            if not cart_token:
+                # Generar nuevo token
+                cart_token = get_random_string(48)
+            
+            carrito, created = Carrito.objects.get_or_create(
+                cart_token=cart_token,
+                estado='open',
+                defaults={'user': None}
+            )
+        
+        return carrito
+    @action(detail=False, methods=['post'], url_path='add_item')
+    def add_item(self, request):
+        """
+        qAgregar un producto al carrito del usuario actual o anónimo.
+        URL: POST /api/carritos/add_item/
+        Body: { "producto": 1, "cantidad": 2 }
+        """
+        try:
+            carrito = self.get_or_create_cart()
+        # Log cart details
+            print(f"Carrito: {carrito.id}, Token: {carrito.cart_token}")
+        
+            producto_id = request.data.get('producto')
+            cantidad = int(request.data.get('cantidad', 1))
+        
+            if not producto_id:
+                return Response(
+                    {'error': 'El ID del producto es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+            if cantidad <= 0:
+                return Response(
+                    {'error': 'La cantidad debe ser mayor a 0'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+            producto = get_object_or_404(Producto, id=producto_id)
+        
+        # Log producto details
+            print(f"Producto: {producto.nombre}, Stock: {producto.stock}, Cantidad: {cantidad}")
+        
+        # Verificar stock disponible
+            if producto.stock < cantidad:
+                return Response(
+                    {'error': f'Stock insuficiente. Solo hay {producto.stock} unidades disponibles'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-    def perform_destroy(self, instance):
-        user = self.request.user
-        # Los administradores pueden eliminar cualquier pago
-        if hasattr(user, 'rol') and user.rol and user.rol.nombre == 'Administrador':
-            instance.delete()
-        else:
-            # Los usuarios solo pueden eliminar sus propios pagos
-            if instance.usuario == user:
-                instance.delete()
-            else:
-                raise PermissionDenied("No tienes permiso para eliminar pagos de otros usuarios.")
+        # Crear o actualizar el carrito item
+            item, created = CarritoItem.objects.get_or_create(
+                carrito=carrito,
+                producto=producto,
+                defaults={'cantidad': cantidad}
+            )
+        
+            if not created:
+                nueva_cantidad = item.cantidad + cantidad
+                if producto.stock < nueva_cantidad:
+                    return Response(
+                        {'error': f'Stock insuficiente. Solo hay {producto.stock} unidades disponibles'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                item.cantidad = nueva_cantidad
+                item.save()
+
+        # Log item details
+            print(f"Item agregado al carrito: {item.id}, Cantidad: {item.cantidad}")
+
+            return Response({
+                'message': 'Producto agregado al carrito exitosamente',
+                'item': CarritoItemSerializer(item).data,
+                'carrito': CarritoSerializer(carrito).data,
+                'cart_token': carrito.cart_token  # Devolver token para usuarios anónimos
+            }, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    
+
+    @action(detail=False, methods=['post'], url_path='remove_item')
+    def remove_item(self, request):
+        """
+        Eliminar un ítem del carrito.
+        URL: POST /api/carritos/remove_item/
+        Body: { "producto": 1 }
+        """
+        try:
+            carrito = self.get_or_create_cart()
+            producto_id = request.data.get('producto')
+            
+            if not producto_id:
+                return Response(
+                    {'error': 'El ID del producto es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            item = get_object_or_404(CarritoItem, carrito=carrito, producto_id=producto_id)
+            item.delete()
+
+            return Response({
+                'message': 'Producto eliminado del carrito',
+                'carrito': CarritoSerializer(carrito).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'], url_path='update_item')
+    def update_item(self, request):
+        """
+        Actualizar la cantidad de un producto en el carrito.
+        URL: POST /api/carritos/update_item/
+        Body: { "producto": 1, "cantidad": 3 }
+        """
+        try:
+            carrito = self.get_or_create_cart()
+            producto_id = request.data.get('producto')
+            cantidad = int(request.data.get('cantidad', 1))
+            
+            if not producto_id:
+                return Response(
+                    {'error': 'El ID del producto es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if cantidad <= 0:
+                return Response(
+                    {'error': 'La cantidad debe ser mayor a 0'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            item = get_object_or_404(CarritoItem, carrito=carrito, producto_id=producto_id)
+            
+            # Verificar stock
+            if item.producto.stock < cantidad:
+                return Response(
+                    {'error': f'Stock insuficiente. Solo hay {item.producto.stock} unidades disponibles'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            item.cantidad = cantidad
+            item.save()
+
+            return Response({
+                'message': 'Cantidad actualizada',
+                'item': CarritoItemSerializer(item).data,
+                'carrito': CarritoSerializer(carrito).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='my_cart')
+    def my_cart(self, request):
+        """
+        Obtener el carrito actual del usuario.
+        URL: GET /api/carritos/my_cart/
+        Query params (opcional para anónimos): ?cart_token=xxx
+        """
+        try:
+            carrito = self.get_or_create_cart()
+            return Response(CarritoSerializer(carrito).data)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'], url_path='clear_cart')
+    def clear_cart(self, request):
+        """
+        Vaciar el carrito completamente.
+        URL: POST /api/carritos/clear_cart/
+        """
+        try:
+            carrito = self.get_or_create_cart()
+            carrito.items.all().delete()
+            
+            return Response({
+                'message': 'Carrito vaciado exitosamente',
+                'carrito': CarritoSerializer(carrito).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class CarritoItemViewSet(viewsets.ModelViewSet):
+    queryset = CarritoItem.objects.all()
+    serializer_class = CarritoItemSerializer
+    
+    def get_queryset(self):
+        """Filtrar items según el carrito del usuario."""
+        if self.request.user.is_authenticated:
+            return CarritoItem.objects.filter(carrito__user=self.request.user)
+        cart_token = self.request.query_params.get('cart_token')
+        if cart_token:
+            return CarritoItem.objects.filter(carrito__cart_token=cart_token)
+        return CarritoItem.objects.none()
+
+
+
+from .models import TipoGarantia
+from .serializers import TipoGarantiaSerializer
+
+class TipoGarantiaViewSet(viewsets.ModelViewSet):
+    queryset = TipoGarantia.objects.all()
+    serializer_class = TipoGarantiaSerializer
+from django.utils import timezone
+
+# Webhook to handle Stripe events
+@csrf_exempt
+def stripe_webhook(request):
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+
+    if not sig_header:
+        print("No se recibió firma de Stripe")
+        return HttpResponse(status=400)
+
+    event = None
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError as e:
+        print(f"Payload inválido: {str(e)}")
+        return HttpResponse(status=400)
+    except stripe.error.SignatureVerificationError as e:
+        print(f"Firma inválida: {str(e)}")
+        return HttpResponse(status=400)
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+
+        # Obtener metadata
+        metadata = session.get('metadata', {})
+        venta_id = metadata.get('venta_id')  # Asegúrate de que esta metadata se esté enviando correctamente
+        usuario_id = metadata.get('usuario_id')
+
+        print(f"Webhook recibido - Venta ID: {venta_id}, Usuario ID: {usuario_id}")
+
+        if not all([venta_id, usuario_id]):
+            logger.error(f"Metadata incompleta: {metadata}")
+            return HttpResponse(status=400)
+
+        try:
+            usuario = Usuario.objects.get(id=usuario_id)
+
+            # Monto total (convertir de centavos a unidades)
+            monto = session['amount_total'] / 100  # Stripe's amount is in cents
+            referencia = session.get('payment_intent') or session.get('id')
+
+            print(f"Procesando pago - Usuario: {usuario.email}, Monto: {monto}, Referencia: {referencia}")
+
+            # Evitar duplicados de pago
+            existing_pago = Pago.objects.filter(
+                referencia=referencia, 
+                usuario=usuario
+            ).first()
+
+            if existing_pago:
+                logger.info(f"Pago duplicado detectado con referencia: {referencia}")
+                return HttpResponse(status=200)
+
+            # Crear la venta (precio_total es el monto total de la venta)
+            venta = Venta.objects.create(
+                cliente=usuario,  # Correcto: 'cliente' en vez de 'usuario'
+                precio_total=monto,  # Correcto: 'precio_total' en vez de 'monto_total'
+                estado_venta='pagado',
+                metodo_pago='tarjeta',  # Agregar el método de pago
+            )
+
+            # Asociar productos a la venta (añadir productos al carrito)
+            carrito = Carrito.objects.get(id=venta_id)  # Usar el carrito_id
+            for item in carrito.items.all():
+                VentaProducto.objects.create(
+                    venta=venta,
+                    producto=item.producto,
+                    cantidad=item.cantidad,
+                    precio_unitario=item.precio_unitario
+                )
+
+            print(f"Venta creada exitosamente: ID {venta.id}")
+
+            # Actualizar el estado del carrito
+            carrito.estado = 'ordered'
+            carrito.save()
+
+            # Crear el Pago asociado a esta venta
+            pago = Pago.objects.create(
+                usuario=usuario,
+                tipo_pago='carrito',
+                monto=monto,
+                metodo_pago='tarjeta',
+                referencia=referencia,
+                fecha_pago=timezone.now(),
+                content_type=ContentType.objects.get_for_model(venta),
+                object_id=venta.id
+            )
+
+            print(f"Pago creado exitosamente: ID {pago.id} para la venta {venta.id}")
+
+        except Exception as e:
+            logger.error(f"Error inesperado en webhook: {str(e)}", exc_info=True)
+            return HttpResponse(status=500)
+
+    return HttpResponse(status=200)
+
+
+
+
+    

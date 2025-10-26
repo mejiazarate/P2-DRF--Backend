@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+import stripe 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,8 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET')
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
+
+# En settings.py, temporalmente para depuración:
+print(f"STRIPE_PUBLISHABLE_KEY: {STRIPE_PUBLISHABLE_KEY}")
+print(f"STRIPE_SECRET_KEY: {STRIPE_SECRET_KEY}")
+print(f"STRIPE_WEBHOOK_SECRET: {STRIPE_WEBHOOK_SECRET}")
+stripe.api_key = STRIPE_SECRET_KEY
 
 #firebase
 FIREBASE_CREDENTIALS=r'C:\Users\Usuario\Documents\si2_projects\PARCIAL 2 BACKEND\si2-p1-firebase-adminsdk-fbsvc-33c74a4bb7.json'
@@ -34,8 +41,7 @@ SECRET_KEY = 'django-insecure-be!h%qswv#89$uwau^v6-2umuzf11lf5l*xon925asr7alt@l3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 AUTH_USER_MODEL = 'app.Usuario'  
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -152,6 +158,28 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {'format': '%(levelname)s %(name)s — %(message)s'},
+        'verbose': {'format': '%(asctime)s %(levelname)s %(name)s [%(pathname)s:%(lineno)d] — %(message)s'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'verbose'},
+    },
+    'loggers': {
+        'app': { 'handlers': ['console'], 'level': 'INFO', 'propagate': False },
+        # o más granular:
+        'app.views': { 'handlers': ['console'], 'level': 'INFO', 'propagate': False },
+        'storages': { # Para ver logs de django-storages
+            'handlers': ['console'],
+            'level': 'INFO', 
+            'propagate': False,
+        },
+    }
+}
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -176,3 +204,6 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'

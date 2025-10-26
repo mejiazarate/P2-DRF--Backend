@@ -12,9 +12,11 @@ def generar_pdf_comprobante(pago):
     html_string = render_to_string('comprobantes/comprobante_pago.html', {'pago': pago})
 
     # Generar PDF en memoria
+    print(f"Generando PDF para el pago {pago.id}...")
     html = HTML(string=html_string)
     pdf_buffer = BytesIO()
     html.write_pdf(pdf_buffer)
+    print(f"PDF generado en memoria para el pago {pago.id}.")
 
     # Guardar en el campo FileField
     nombre_archivo = f"comprobante_pago_{pago.id}.pdf"
@@ -24,3 +26,4 @@ def generar_pdf_comprobante(pago):
         save=True  # Guarda el modelo automáticamente
     )
     pdf_buffer.close()
+    print(f"Comprobante guardado correctamente en la base de datos para el pago {pago.id}.")

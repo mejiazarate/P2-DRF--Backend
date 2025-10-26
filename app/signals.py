@@ -19,14 +19,13 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Pago)
 def crear_comprobante_automatico(sender, instance, created, **kwargs):
-    
     if created and not instance.comprobante:  # Solo si es nuevo y no tiene comprobante
         try:
-            generar_pdf_comprobante(instance)
+            print(f"Generando comprobante para el pago {instance.id}...")
+            generar_pdf_comprobante(instance)  # Genera el comprobante
+            print(f"Comprobante generado correctamente para el pago {instance.id}.")
         except Exception as e:
-            # Loggear error (opcional pero recomendado)
             print(f"Error generando comprobante para pago {instance.id}: {e}")
-            # En producción, usa logging en vez de print
 
 
 @receiver(post_save, sender=IncidenteSeguridadIA)
