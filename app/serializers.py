@@ -282,31 +282,34 @@ class PromocionSerializer(serializers.ModelSerializer):
         # Se pueden agregar valores adicionales aquí si es necesario, por ejemplo:
         rep['descuento_formateado'] = f"{instance.descuento}%"
         return rep
-class VentaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Venta
-        fields = ['id', 'fecha', 'cliente',
-                   'cantidad', 'precio_unitario',
-                     'precio_total', 'promocion',
-                       'metodo_pago', 'estado_venta',
-                       ]
+from rest_framework import serializers
+from .models import Carrito, CarritoItem, Producto
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        # Formatear los precios o agregar información adicional si es necesario
-        rep['precio_total_formateado'] = f"${instance.precio_total:.2f}"
-        return rep
+class ProductoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Producto
+        fields = ['id', 'nombre', 'descripcion', 'precio', 'imagen', 'stock', 'marca', 'modelo']
 
 class VentaProductoSerializer(serializers.ModelSerializer):
+    producto = ProductoSerializer()
     class Meta:
         model = VentaProducto
-        fields = ['id','venta', 'producto', 'cantidad', 'precio_unitario']
+        fields = ['producto', 'cantidad', 'precio_unitario']
+
+class VentaSerializer(serializers.ModelSerializer):
+    items_vendidos = VentaProductoSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = ['id', 'fecha', 'estado_venta', 'metodo_pago', 'precio_total', 'items_vendidos']
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        # Agregar detalles adicionales del producto si es necesario
-        rep['producto_nombre'] = instance.producto.nombre
+        rep['precio_total_formateado'] = f"Bs.{instance.precio_total:.2f}"
         return rep
+
+
+
 # serializers.py
 from rest_framework import serializers
 from .models import Carrito, CarritoItem, Producto
@@ -316,13 +319,6 @@ class TipoGarantiaSerializer(serializers.ModelSerializer):
     class Meta:
         model = TipoGarantia
         fields = '__all__'    
-from rest_framework import serializers
-from .models import Carrito, CarritoItem, Producto
-
-class ProductoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Producto
-        fields = ['id', 'nombre', 'descripcion', 'precio', 'imagen', 'stock', 'marca', 'modelo']
 
 class CarritoItemSerializer(serializers.ModelSerializer):
     # ✅ CORRECCIÓN: Eliminar source='precio_unitario'
@@ -343,11 +339,9 @@ class CarritoSerializer(serializers.ModelSerializer):
         model = Carrito
         fields = ['id', 'user', 'cart_token', 'estado', 'creado', 'actualizado', 'items', 'total', 'cantidad_items']
         read_only_fields = ['cart_token', 'creado', 'actualizado']
-
     def get_cantidad_items(self, obj):
-        """Retorna la cantidad total de items en el carrito."""
-        return obj.items.count()
-
+        """Método para calcular el total de productos en el carrito"""
+        return sum(item.cantidad for item in obj.items.all())
     def to_representation(self, instance):
         """Modifica la representación del Carrito para incluir información adicional."""
         representation = super().to_representation(instance)
@@ -361,3 +355,25 @@ class CarritoSerializer(serializers.ModelSerializer):
             representation.pop('user', None)
         
         return representation
+    
+from rest_framework import serializers
+from .models import ReporteEstatico
+
+class ReporteEstaticoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteEstatico
+        fields = ['id', 'nombre', 'descripcion', 'archivo_pdf', 'archivo_excel', 'fecha_creacion']
+from rest_framework import serializers
+from .models import ReporteDinamico
+
+class ReporteDinamicoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteDinamico
+        fields = ['id', 'nombre', 'descripcion', 'usuario', 'parametros', 'archivo_pdf', 'archivo_excel', 'estado', 'fecha_creacion']
+from rest_framework import serializers
+from .models import ReporteIA
+
+class ReporteIASerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteIA
+        fields = ['id', 'nombre', 'descripcion', 'usuario', 'datos_entrada', 'resultado_ia', 'modelo_ia', 'archivo_pdf', 'archivo_excel', 'estado', 'fecha_creacion']

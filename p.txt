@@ -1,0 +1,17 @@
+from app.models import TipoGarantia  # Asegúrate de importar el modelo correctamente
+
+# Crear 10 registros
+for i in range(1, 11):
+    TipoGarantia.objects.create(
+        tipo=f"Tipo de Garantía {i}",
+        duracion=12,  # Duración predeterminada
+        descripcion=f"Descripción de la garantía {i}",
+        activa=True,
+        fecha_inicio="2025-01-01",
+        fecha_fin="2025-12-31",
+        limite_de_reemplazos=2,
+        exclusiones="Exclusiones de garantía aquí.",
+        cobertura="Cobertura de la garantía aquí.",
+        documentacion=None,  # O puede poner un archivo si tienes uno disponible
+        activo_para_ventas=True
+    )

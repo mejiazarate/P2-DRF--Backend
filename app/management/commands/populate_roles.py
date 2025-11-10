@@ -1,9 +1,10 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import Group, Permission
+from django.contrib.auth import get_user_model
 from app.models import Rol, Usuario  # Cambié User por Usuario
 
 class Command(BaseCommand):
-    help = 'Pobla la base de datos con los roles predeterminados, asigna permisos y asigna el rol al usuario admin'
+    help = 'Pobla la base de datos con los roles predeterminados, asigna permisos, asigna el rol al usuario admin y crea un superusuario'
 
     def handle(self, *args, **kwargs):
         # Crear los grupos si no existen
@@ -33,5 +34,21 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('Rol de Administrador asignado al usuario admin'))
         except Usuario.DoesNotExist:  # Asegúrate de que se maneje el modelo correcto
             self.stdout.write(self.style.ERROR('El usuario con username "admin" no existe'))
+
+        # Crear un superusuario con el nombre de usuario 'admin' y la contraseña 'fail2025'
+        if not Usuario.objects.filter(username='admin').exists():
+            UserModel = get_user_model()
+            user = UserModel.objects.create_superuser(
+                username='admin',
+                password='fail2025',
+                email='admin@example.com'  # Cambia o deja vacío si no es necesario
+            )
+
+            # Asignar el rol de 'Administrador' al superusuario
+            rol_admin = Rol.objects.get(nombre='Administrador')
+            user.rol = rol_admin
+            user.save()
+
+            self.stdout.write(self.style.SUCCESS('Superusuario "admin" creado exitosamente y rol "Administrador" asignado.'))
 
         self.stdout.write(self.style.SUCCESS('Roles y grupos creados y configurados exitosamente'))

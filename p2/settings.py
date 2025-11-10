@@ -13,11 +13,46 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
-import stripe 
+import tempfile
 
+import stripe 
+import base64
+import json
+import os 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# --- CREDENCIALES DE DIALOGFLOW --- 
+
+# Obtener las credenciales de Dialogflow en Base64 desde las variables de entorno
+DIALOGFLOW_CREDENTIALS_BASE64 = config("DIALOGFLOW_CREDENTIALS_BASE64", default=None)
+
+if DIALOGFLOW_CREDENTIALS_BASE64:
+    try:
+        # Decodificar las credenciales
+        credentials_json = base64.b64decode(DIALOGFLOW_CREDENTIALS_BASE64).decode('utf-8')
+        # Verificar si el JSON es válido (opcional)
+        json.loads(credentials_json)
+        
+        # Guardar el archivo temporal
+        temp_dir = Path(tempfile.gettempdir())  # Usamos el directorio temporal
+        temp_credentials_file = temp_dir / "dialogflow_credentials_from_base64.json"
+        
+        with open(temp_credentials_file, "w") as f:
+            f.write(credentials_json)
+        
+        # Establecer la variable de entorno para usar las credenciales
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(temp_credentials_file)
+        
+        # Confirmar que las credenciales de Dialogflow se cargaron correctamente
+        print(f"[DEBUG] Las credenciales de Dialogflow se han cargado desde Base64 y se guardaron temporalmente en: {temp_credentials_file}")
+    
+    except Exception as e:
+        print(f"[ERROR] No se pudo procesar las credenciales de Dialogflow desde Base64: {e}")
+else:
+    print("[INFO] 'DIALOGFLOW_CREDENTIALS_BASE64' no está definida. Las credenciales de Dialogflow no están configuradas.")
+
+# --- FIN CREDENCIALES DE DIALOGFLOW ---
 # --- STRIPE CONFIGURATION ---
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
@@ -54,7 +89,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
      # Your app 
     'app',
-
+    #'app.apps.AppConfig',
     # Django REST Framework 
     'rest_framework',
     'corsheaders',
@@ -81,7 +116,7 @@ ROOT_URLCONF = 'p2.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -206,4 +241,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+
+#convfiguracio de smntlinficio
+# Configuración de Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.sendgrid.net'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False  # ← IMPORTANTE: Debe ser False
+EMAIL_HOST_USER = 'apikey'  # ← Literalmente la palabra "apikey"
+EMAIL_HOST_PASSWORD = config('SENDGRID_API_KEY')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
+EMAIL_TIMEOUT = 100 # ← Añade timeout 
+#convfiguracio de smnt sin
+print(f"hsos user: {EMAIL_HOST_USER}")
+print(f"passro api gmail: {EMAIL_HOST_PASSWORD}")
+print(f"defau maiel : {DEFAULT_FROM_EMAIL}")

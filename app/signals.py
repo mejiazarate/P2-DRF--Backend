@@ -6,17 +6,17 @@ from .utils import generar_pdf_comprobante
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth.models import Group
-from .models import IncidenteSeguridadIA
 from .fcm_service import enviar_notificacion_fcm 
 import logging
-from .models import Cuota, NotificacionPush, DispositivoMovil, Propiedad, Usuario
+from .models import  NotificacionPush, DispositivoMovil, Usuario
 import requests
 import json
 from django.conf import settings
 
 # Configura el logger
 logger = logging.getLogger(__name__)
-
+#instance es lla que ha dsido guardada
+'''
 @receiver(post_save, sender=Pago)
 def crear_comprobante_automatico(sender, instance, created, **kwargs):
     if created and not instance.comprobante:  # Solo si es nuevo y no tiene comprobante
@@ -27,9 +27,10 @@ def crear_comprobante_automatico(sender, instance, created, **kwargs):
         except Exception as e:
             print(f"Error generando comprobante para pago {instance.id}: {e}")
 
-
-@receiver(post_save, sender=IncidenteSeguridadIA)
+'''
+#@receiver(post_save, sender=IncidenteSeguridadIA)
 def notificar_incidente(sender, instance, created, **kwargs):
+    pass
     if not created:
         logger.debug(f"IncidenteSeguridadIA {instance.id} actualizado, no se envía notificación.")
         return

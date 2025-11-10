@@ -21,14 +21,17 @@ from django.http import JsonResponse
 from django.contrib import admin
 from django.urls import path,include
 
-
+# urls.py (en desarrollo)
+from django.conf import settings
+from django.conf.urls.static import static
 urlpatterns = [
         path('admin/', admin.site.urls),
         path("api/", include("app.urls")),
 
         
 
-]
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 def api_handler_404(request, exception=None):
     if request.path.startswith("/api/"):
         exc = NotFound()  # detail="Not found.", default_code="not_found"
@@ -46,4 +49,4 @@ def api_handler_404(request, exception=None):
     from django.views.defaults import page_not_found
     return page_not_found(request, exception, template_name="404.html")
 #name orf core
-handler404 = "p2.urls.api_handler_404"
+handler404 = 'p2.urls.api_handler_404'

@@ -8,6 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+
+
 # Dependencias de compilación para Python packages AND WeasyPrint system dependencies
 # Install system dependencies needed for WeasyPrint at build time (some might be linked by cffi)
 # and also those needed at runtime

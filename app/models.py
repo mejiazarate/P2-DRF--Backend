@@ -20,6 +20,7 @@ class Usuario(AbstractUser):
     direccion = models.CharField(max_length=255, blank=True, null=True)
     fecha_nacimiento = models.DateField(blank=True, null=True)
     rol = models.ForeignKey(Rol, on_delete=models.CASCADE, blank=True, null=True)
+    es_recurrente = models.BooleanField(default=False, help_text="Indica si el usuario es recurrente.")
     def __str__(self):
         return self.username or f"User {self.id}" 
 class Bitacora(models.Model):
@@ -83,15 +84,7 @@ class DispositivoMovil(models.Model):
     def __str__(self):
         return f"{self.usuario.username} - {self.modelo_dispositivo or 'Dispositivo'}"
 class NotificacionPush(models.Model):
-    TIPO_NOTIFICACION_CHOICES = [
-        ('seguridad', 'Seguridad'),
-        ('finanzas', 'Finanzas'),
-        ('areas_comunes', 'Áreas Comunes'),
-        ('mantenimiento', 'Mantenimiento'),
-        ('comunicado', 'Comunicado'),
-        ('sistema', 'Sistema'),
-    ]
-
+   
     ESTADO_CHOICES = [
         ('enviada', 'Enviada'),
         ('entregada', 'Entregada'),
@@ -115,7 +108,7 @@ class NotificacionPush(models.Model):
     )
     titulo = models.CharField(max_length=150)
     cuerpo = models.TextField()
-    tipo = models.CharField(max_length=50, choices=TIPO_NOTIFICACION_CHOICES, default='sistema')
+    tipo = models.CharField(max_length=50, default='sistema')
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='enviada')
     fecha_envio = models.DateTimeField(auto_now_add=True)
     fecha_entrega = models.DateTimeField(null=True, blank=True, help_text="Cuando FCM confirma entrega")
@@ -196,16 +189,23 @@ class Carrito(models.Model):
         if not self.cart_token:
             self.cart_token = get_random_string(48)
         super().save(*args, **kwargs)
-
     @property
     def total(self):
-        """Calcula el total del carrito."""
-        return sum(item.subtotal for item in self.items.select_related('producto').all())
+        """Método para calcular el total del carrito sumando los productos y cantidades."""
+        total = 0
+        for item in self.items.all():  # Suponiendo que el carrito tiene una relación de "items"
+            total += item.precio_unitario * item.cantidad  # Suma el precio por la cantidad
+        return total
+class Feriado(models.Model):
+    fecha = models.DateField(unique=True)
 
     def __str__(self):
-        return f"Carrito de {self.user.username} - {self.estado}"    
+        return f" - {self.fecha}"
+
+   
 class Venta(models.Model):
     fecha = models.DateField(default=timezone.now) 
+    es_feriado = models.BooleanField(default=False, help_text="Indica si la venta se realizó en un feriado")
     cliente = models.ForeignKey(Usuario, on_delete=models.CASCADE)
     carrito = models.OneToOneField(Carrito, on_delete=models.CASCADE, null=True, blank=True)  # Relación con Carrito
     cantidad = models.IntegerField()
@@ -219,8 +219,6 @@ class Venta(models.Model):
         return f"Venta #{self.id} - Cliente {self.cliente.username}"
 
 
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
 
 class Pago(models.Model):
  
@@ -258,7 +256,7 @@ class Pago(models.Model):
 
 
 class VentaProducto(models.Model):
-    venta = models.ForeignKey(Venta, on_delete=models.CASCADE)
+    venta = models.ForeignKey(Venta, related_name='items_vendidos', on_delete=models.CASCADE)
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
     cantidad = models.IntegerField()
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
@@ -305,5 +303,38 @@ class CarritoItem(models.Model):
         return f"{self.cantidad}x {self.producto.nombre} en carrito {self.carrito.id}"
 
 
+class ReporteEstatico(models.Model):
+    nombre = models.CharField(max_length=200)
+    descripcion = models.TextField()
+    archivo_pdf = models.FileField(upload_to='reportes/estaticos/', null=True, blank=True)
+    archivo_excel = models.FileField(upload_to='reportes/estaticos/', null=True, blank=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"Reporte Estático: {self.nombre}"
+class ReporteDinamico(models.Model):
+    nombre = models.CharField(max_length=200)
+    descripcion = models.TextField()
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    parametros = models.JSONField(help_text="Parámetros utilizados para generar el reporte")  # Parámetros de filtrado
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    archivo_pdf = models.FileField(upload_to='reportes/dinamicos/', null=True, blank=True)
+    archivo_excel = models.FileField(upload_to='reportes/dinamicos/', null=True, blank=True)
+    estado = models.CharField(max_length=50, choices=[('generado', 'Generado'), ('en_proceso', 'En Proceso')])
 
+    def __str__(self):
+        return f"Reporte Dinámico: {self.nombre}"
+class ReporteIA(models.Model):
+    nombre = models.CharField(max_length=200)
+    descripcion = models.TextField()
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    datos_entrada = models.JSONField(help_text="Datos utilizados para alimentar el modelo de IA")
+    resultado_ia = models.JSONField(help_text="Resultado generado por el modelo de IA (recomendaciones, análisis)")
+    modelo_ia = models.CharField(max_length=100, help_text="Nombre del modelo de IA utilizado")
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    archivo_pdf = models.FileField(upload_to='reportes/ia/', null=True, blank=True)
+    archivo_excel = models.FileField(upload_to='reportes/ia/', null=True, blank=True)
+    estado = models.CharField(max_length=50, choices=[('generado', 'Generado'), ('en_proceso', 'En Proceso')])
+
+    def __str__(self):
+        return f"Reporte IA: {self.nombre}"
